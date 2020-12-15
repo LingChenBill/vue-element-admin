@@ -74,7 +74,6 @@
 
 ```bash
 # clone the project
-git clone https://github.com/PanJiaChen/vue-element-admin.git
 
 # enter the project directory
 cd vue-element-admin
