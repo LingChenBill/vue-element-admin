@@ -32,8 +32,8 @@
         <el-option
           v-for="item in categoryList"
           :key="item.value"
-          :label="item.label + '(' + item.num + ')'"
-          :value="item.value"
+          :label="`${item.label}(${item.num})`"
+          :value="item.label"
         />
       </el-select>
       <el-button
@@ -72,6 +72,7 @@
       fit
       highlight-current-row
       style="width: 100%"
+      :default-sort="defaultSort"
       @sort-change="sortChange"
     >
       <!--传统的列表的列展示方式.-->
@@ -85,7 +86,6 @@
 
       <el-table-column
         label="书名"
-        width="150"
         align="center"
       >
         <template slot-scope="{ row: { titleWrapper } }">
@@ -121,6 +121,7 @@
       <el-table-column
         label="语言"
         prop="language"
+        width="50"
         align="center"
       />
 
@@ -158,28 +159,44 @@
         prop="filePath"
         width="100"
         align="center"
-      />
+      >
+        <template slot-scope="{ row: { filePath }}">
+          {{ filePath | valueFilter }}
+        </template>
+      </el-table-column>
 
       <el-table-column
         label="解压路径"
         prop="unzipPath"
         width="100"
         align="center"
-      />
+      >
+        <template slot-scope="{ row: { unzipPath }}">
+          {{ unzipPath | valueFilter }}
+        </template>
+      </el-table-column>
 
       <el-table-column
         label="上传人"
         prop="createUser"
         width="100"
         align="center"
-      />
+      >
+        <template slot-scope="{ row: { createUser }}">
+          {{ createUser | valueFilter }}
+        </template>
+      </el-table-column>
 
       <el-table-column
         label="上传时间"
         prop="createDt"
         width="100"
         align="center"
-      />
+      >
+        <template slot-scope="{ row: { createDt }}">
+          {{ createDt | timeFilter }}
+        </template>
+      </el-table-column>
 
       <el-table-column
         label="操作"
@@ -189,6 +206,7 @@
       >
         <template slot-scope="{ row }">
           <el-button type="text" icon="el-icon-edit" @click="handleUpdate(row)" />
+          <el-button type="text" icon="el-icon-delete" style="color: red" @click="handleDelete(row)" />
         </template>
       </el-table-column>
     </el-table>
@@ -197,7 +215,7 @@
       :total="total"
       :page.sync="listQuery.page"
       :limit.sync="listQuery.pageSize"
-      @pagination="getList"
+      @pagination="refresh"
     />
   </div>
 </template>
@@ -205,11 +223,22 @@
 <script>
 import Pagination from '@/components/Pagination/index'
 import waves from '@/directive/waves/waves'
-import { getCategory, listBook } from '@/api/book'
+import { getCategory, listBook, deleteBook } from '@/api/book'
+import { parseTime } from '@/utils'
 
 export default {
   components: { Pagination },
   directives: { waves },
+  filters: {
+    // 字段是否为空过滤器.
+    valueFilter(value) {
+      return value || '无'
+    },
+    // 时间过滤器.
+    timeFilter(time) {
+      return time ? parseTime(time, '{y}/{m}/{d} {h}:{i}') : '无'
+    }
+  },
   data() {
     return {
       // 列表查询条件.
@@ -225,7 +254,9 @@ export default {
       // 列表.
       list: [],
       // 列表总记录数.
-      total: 0
+      total: 0,
+      // 默认排序.
+      defaultSort: {}
     }
   },
   created() {
@@ -237,12 +268,32 @@ export default {
     // 获取类型.
     this.getCategoryList()
   },
+
+  /**
+   * 路由更新的勾子函数.
+   */
+  beforeRouteUpdate(to, from, next) {
+    if (to.path === from.path) {
+      // 获取路由后面的参数.
+      const newQuery = Object.assign({}, to.query)
+      const oldQuery = Object.assign({}, from.query)
+      // 若路由参数更新后,重新刷新列表.
+      if (JSON.stringify(newQuery) !== JSON.stringify(oldQuery)) {
+        this.getList()
+      }
+    }
+    next()
+  },
   methods: {
 
     /**
      * 解析查询参数.
      */
     parseQuery() {
+      // 获取当前路由的query.
+      const query = Object.assign({}, this.$route.query)
+      // 默认排序.
+      let sort = '+id'
       // 设置默认列表查询参数.
       const listQuery = {
         // 当前页.
@@ -250,10 +301,26 @@ export default {
         // 一页记录数.
         pageSize: 20,
         // 默认排序.
-        sort: '+id'
+        sort
       }
+
+      if (query) {
+        // 对路由参数类型转换.
+        query.page && (query.page = +query.page)
+        query.pageSize && (query.pageSize = +query.pageSize)
+        query.sort && (sort = query.sort)
+      }
+
+      const sortSymbol = sort[0]
+      const sortColumn = sort.slice(1, sort.length)
+      // 默认排序设置.
+      this.defaultSort = {
+        prop: sortColumn,
+        order: sortSymbol === '+' ? 'ascending' : 'descending'
+      }
+
       // 将listQuery合并.
-      this.listQuery = { ...listQuery, ...this.listQuery }
+      this.listQuery = { ...listQuery, ...query }
     },
 
     /**
@@ -270,8 +337,22 @@ export default {
      * 查询处理.
      */
     handleFilter() {
-      console.log('handlerFilter: ', this.listQuery)
-      this.getList()
+      // 将页码重置为1.
+      this.listQuery.page = 1
+      // 重新刷新列表.
+      this.refresh()
+      // this.getList()
+    },
+
+    /**
+     * 重新刷新列表.
+     */
+    refresh() {
+      // 重置路由参数.
+      this.$router.push({
+        path: '/book/list',
+        query: this.listQuery
+      })
     },
 
     /**
@@ -329,7 +410,6 @@ export default {
      * 列表排序.
      */
     sortChange(data) {
-      console.log('sortChange: ', data)
       const { prop, order } = data
       // 排序处理.
       this.sortBy(prop, order)
@@ -354,10 +434,33 @@ export default {
      * @param row
      */
     handleUpdate(row) {
-      console.log('row: ', row)
       // 用{row.fileName}需要使用反漂号.
       // 跳转到电子书编辑画面.
       this.$router.push(`/book/edit/${row.fileName}`)
+    },
+
+    /**
+     * 删除电子书.
+     * @param row
+     */
+    handleDelete(row) {
+      // 删除确认框.
+      this.$confirm('此操作将永久删除该电子书,是否继续?', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        deleteBook(row.fileName).then(response => {
+          this.$notify({
+            title: response.msg || '删除成功',
+            message: response.msg,
+            type: 'success',
+            duration: 2000
+          })
+          // 刷新列表.
+          this.getList()
+        })
+      }).catch(() => {})
     }
   }
 }

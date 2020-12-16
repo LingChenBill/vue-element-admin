@@ -61,3 +61,16 @@ export function listBook(params) {
     params
   })
 }
+
+/**
+ * 删除电子书.
+ * @param fileName
+ * @returns {AxiosPromise}
+ */
+export function deleteBook(fileName) {
+  return request({
+    url: 'book/delete',
+    method: 'get',
+    params: { fileName }
+  })
+}
